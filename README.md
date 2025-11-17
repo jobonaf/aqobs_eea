@@ -32,3 +32,41 @@ Automated download and processing of EEA air quality data.
 - Email required for EEA API
 - Coordinates: WGS84 (lon/lat)
 - Time zone: UTC
+
+## Python environment setup
+Choose one of the following approaches before running the scripts:
+
+### Option A: Virtual environment (recommended)
+1. Install Python 3.11 (or newer). On Windows the default path is typically `C:\\Users\\<you>\\AppData\\Local\\Programs\\Python\\Python311\\python.exe`.
+2. Create and activate a venv:
+   ```bash
+   python -m venv .venv
+   # Windows PowerShell
+   .venv\\Scripts\\Activate.ps1
+   # macOS/Linux
+   source .venv/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. If you are using VS Code, choose **Python: Select Interpreter** and point to `.venv\\Scripts\\python.exe` so the editor runs tasks inside the venv (other IDEs/editors can target the same interpreter path).
+
+### Option B: Conda environment
+1. Create a new environment (example):
+   ```bash
+   conda create -n eea-env python=3.11 -y
+   conda activate eea-env
+   ```
+2. Install dependencies via pip inside the activated env:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Select the conda interpreter in your IDE/editor (e.g., in VS Code use **Select Interpreter**, otherwise point tooling to `C:\\Users\\<you>\\miniconda3\\envs\\eea-env\\python.exe`).
+
+### Option C: Global install (quick & dirty)
+1. Ensure `python --version` returns 3.11+.
+2. Run `pip install -r requirements.txt` (installs packages for your user/site-packages).
+3. Be mindful this may conflict with other projects; prefer options A or B for isolation.
+
+After the dependencies are installed, run the workflow scripts (metadata download, bbox extraction, enrichment, plotting, etc.) from the same interpreter.
