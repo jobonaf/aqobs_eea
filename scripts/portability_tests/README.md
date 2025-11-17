@@ -7,21 +7,23 @@ All scripts rely only on `bash` and the project’s Python dependencies. Each sc
 
 ```
 cd scripts/portability_tests
+bash 00_fetch_metadata.sh
 bash 01_check_extract_bbox.sh
 bash 02_enrich_smoke.sh
 bash 03_vocab_resilience.sh
 ```
 
-Set environment variables inline when needed, e.g. `METADATA_CSV=/data/metadata.csv bash 01_check_extract_bbox.sh`.
+Set environment variables inline when needed, e.g. `OUTPUT_DIR=/data bash 00_fetch_metadata.sh`.
 
 | Script | Purpose |
 | --- | --- |
+| `00_fetch_metadata.sh` | Downloads station metadata via `download_eea_metadata.py` so the following tests have inputs. |
 | `01_check_extract_bbox.sh` | Runs `extract_eea_bbox.py --check` to confirm metadata/parquet alignment for a small bounding box. |
 | `02_enrich_smoke.sh` | Executes `enrich_eea_data.py` against a lightweight CSV to confirm vocabulary lookups and coverage logging. |
 | `03_vocab_resilience.sh` | Temporarily hides a vocabulary JSON to ensure the enrichment path logs warnings yet still completes.
 
 ## Defaults
-- Metadata CSV: `metadata/stations_metadata.csv`
+- Metadata CSV: `metadata/stations_metadata.csv` (produced by script 00)
 - Parquet directory: `eea_parquets`
 - Input CSV for enrichment: `tmp/portability_bbox.csv` (produced by script 01)
 - Vocabulary directory: `eea_vocabularies`
