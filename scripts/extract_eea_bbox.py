@@ -3,9 +3,11 @@
 """
 extract_eea_bbox.py
 Description: Extracts EEA air quality measurements for stations within a bounding box,
-             optionally filtering by pollutants and time range, and writes a single CSV.
+             optionally filtering by pollutants, time range, and aggregation type.
 Author: Giovanni Bonafè | ARPA-FVG
 Created: 2025-11-04
+Last update: 2025-11-17
+Version: 1.1
 """
 
 import os
@@ -115,7 +117,7 @@ def map_pollutant_codes(pollutants):
     
     return mapped
 
-def process_parquet_file(path, station_ids, pollutants=None, start=None, end=None, verbose=False):
+def process_parquet_file(path, station_ids, pollutants=None, start=None, end=None, aggregation=None, verbose=False):
     """Process a single parquet file."""
     try:
         df_parquet = pq.read_table(path).to_pandas()
@@ -135,6 +137,8 @@ def process_parquet_file(path, station_ids, pollutants=None, start=None, end=Non
         print(f"  {len(df_parquet)} records in {path.name}")
         unique_station_ids = df_parquet['Station_clean'].unique().tolist()
         print(f"  Station IDs in file: {unique_station_ids}")
+        if 'AggType' in df_parquet.columns:
+            print(f"  Aggregation types in file: {df_parquet['AggType'].unique().tolist()}")
 
     # Filter by cleaned Station ID
     df_filtered = df_parquet[df_parquet['Station_clean'].isin(station_ids)].copy()
@@ -143,6 +147,13 @@ def process_parquet_file(path, station_ids, pollutants=None, start=None, end=Non
         if verbose:
             print(f"  No matching stations found in {path.name}")
         return df_filtered
+    
+    # Optional aggregation type filter
+    if aggregation is not None and 'AggType' in df_filtered.columns:
+        before_filter = len(df_filtered)
+        df_filtered = df_filtered[df_filtered['AggType'] == aggregation]
+        if verbose:
+            print(f"  Aggregation filter '{aggregation}': {before_filter} -> {len(df_filtered)} records")
     
     # Optional pollutant filter - map names to codes
     if pollutants is not None and 'Pollutant' in df_filtered.columns:
@@ -163,10 +174,12 @@ def process_parquet_file(path, station_ids, pollutants=None, start=None, end=Non
         matching_ids = df_filtered['Station_clean'].unique().tolist()
         print(f"  Matching Station IDs: {matching_ids}")
         print(f"  Found {len(df_filtered)} matching records")
+        if 'AggType' in df_filtered.columns:
+            print(f"  Aggregation types found: {df_filtered['AggType'].unique().tolist()}")
     
     return df_filtered
 
-def debug_id_matching(metadata_df, parquet_dirs, bbox, pollutants=None, verbose=False):
+def debug_id_matching(metadata_df, parquet_dirs, bbox, pollutants=None, aggregation=None, verbose=False):
     """Debug function to analyze ID matching issues."""
     print("\n" + "=" * 60)
     print("DEBUG ID MATCHING ANALYSIS")
@@ -197,7 +210,13 @@ def debug_id_matching(metadata_df, parquet_dirs, bbox, pollutants=None, verbose=
                         df_parquet['Samplingpoint'].apply(clean_samplingpoint_id).tolist()
                     )
                     all_parquet_station_ids.update(parquet_station_ids)
-                    parquet_files_by_dir[parquet_dir].append((pq_file.name, parquet_station_ids))
+                    
+                    # Check aggregation types if filtering by aggregation
+                    agg_types = []
+                    if 'AggType' in df_parquet.columns:
+                        agg_types = df_parquet['AggType'].unique().tolist()
+                    
+                    parquet_files_by_dir[parquet_dir].append((pq_file.name, parquet_station_ids, agg_types))
                     
             except Exception as e:
                 print(f"  Error reading {pq_file}: {e}")
@@ -219,15 +238,19 @@ def debug_id_matching(metadata_df, parquet_dirs, bbox, pollutants=None, verbose=
     
     print(f"Station IDs in parquet files but not in metadata: {len(extra_in_parquet)}")
     
-    # Analysis by directory
+    # Analysis by directory and aggregation
     print(f"\nAnalysis by directory:")
     for dir_name, files in parquet_files_by_dir.items():
         dir_ids = set()
-        for pq_file, pq_ids in files:
+        dir_agg_types = set()
+        for pq_file, pq_ids, agg_types in files:
             dir_ids.update(pq_ids)
+            dir_agg_types.update(agg_types)
         
         dir_matches = metadata_station_ids.intersection(dir_ids)
         print(f"  {Path(dir_name).name}: {len(files)} files sampled, {len(dir_ids)} IDs, {len(dir_matches)} matches")
+        if dir_agg_types:
+            print(f"    Aggregation types: {sorted(dir_agg_types)}")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -235,7 +258,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    parser.add_argument("--indir", type=str, nargs='+', default=["eea_hourly", "eea_daily"], 
+    parser.add_argument("--indir", type=str, nargs='+', default=["eea_parquets"], 
                        help="Input folder(s) with Parquet files (default: %(default)s)")
     parser.add_argument("--metadata", type=str, default="metadata/stations_metadata.csv", 
                        help="Station metadata CSV file (default: %(default)s)")
@@ -246,6 +269,8 @@ def main():
                        help="Bounding box coordinates (default: %(default)s)")
     parser.add_argument("--pollutants", nargs="+", default=None, 
                        help="Optional list of pollutant codes or names (e.g., NO2 PM10 O3 or 8 5 7)")
+    parser.add_argument("--aggregation", type=str, default=None,
+                       help="Optional aggregation type filter (e.g., 'hour', 'day')")
     parser.add_argument("--start", type=str, default=None, 
                        help="Optional start date (YYYY-MM-DD)")
     parser.add_argument("--end", type=str, default=None, 
@@ -281,7 +306,7 @@ def main():
 
         # Debug ID matching if requested
         if args.debug_ids:
-            debug_id_matching(metadata_df, args.indir, args.bbox, pollutants=pollutant_codes, verbose=args.verbose)
+            debug_id_matching(metadata_df, args.indir, args.bbox, pollutants=pollutant_codes, aggregation=args.aggregation, verbose=args.verbose)
             return
 
         # Process all input directories
@@ -305,6 +330,7 @@ def main():
                     pq_file, station_ids,
                     pollutants=pollutant_codes,
                     start=args.start, end=args.end,
+                    aggregation=args.aggregation,
                     verbose=args.verbose
                 )
                 
@@ -334,6 +360,10 @@ def main():
                 if 'Pollutant' in combined_data.columns:
                     pollutants_found = combined_data['Pollutant'].unique().tolist()
                     print(f"✓ Pollutants found: {pollutants_found}")
+                
+                if 'AggType' in combined_data.columns:
+                    agg_types_found = combined_data['AggType'].unique().tolist()
+                    print(f"✓ Aggregation types found: {agg_types_found}")
             else:
                 print("✗ No matching records found for any station")
             return
@@ -356,6 +386,10 @@ def main():
             if 'Pollutant' in result_df.columns:
                 pollutants_found = result_df['Pollutant'].unique()
                 print(f"✓ Pollutants found: {', '.join(map(str, pollutants_found))}")
+            
+            if 'AggType' in result_df.columns:
+                agg_types_found = result_df['AggType'].unique()
+                print(f"✓ Aggregation types: {', '.join(map(str, agg_types_found))}")
                 
         else:
             print("\n✗ No data found for selected stations and filters")

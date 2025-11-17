@@ -13,10 +13,10 @@ Automated download and processing of EEA air quality data.
 
 ## Workflow
 0. Activate environment: `module load miniconda3 R/3.5.2; conda activate eea_env`
-1. Download measurements: `python download_eea_e1a_e2a.py --email your@email.org --aggregation hour`
+1. Download measurements: `python download_eea_e1a_e2a.py --email your@email.org --pollutants PM10 --dataset E1a --download-dir eea_parquets`
 2. Download metadata: `python download_eea_metadata.py`
 3. Download vocabularies: `python download_eea_vocabularies.py`
-4. Extract region: `python extract_eea_bbox.py --bbox 12.3 13.95 45.58 46.67`
+4. Extract region: `python extract_eea_bbox.py --aggregation day --start 2024-01-01 --end 2025-12-31 --bbox 10 14 45 47`
 5. Enrich data: `python enrich_eea_data.py --input eea_bbox.csv --output eea_enriched.csv --verbose`
 6. Generate plots: `Rscript plot_eea_boxplots.R -i eea_enriched.csv -o boxplots.pdf`
 
