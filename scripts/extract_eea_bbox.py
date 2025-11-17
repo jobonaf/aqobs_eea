@@ -14,34 +14,14 @@ import pandas as pd
 import pyarrow.parquet as pq
 from pathlib import Path
 import sys
-import re
 
-def extract_station_id(sp_id):
-    """
-    Extract station ID from Samplingpoint ID.
-    Format: "IT/SPO.IT1823A_5_BETA_2016-10-13_00:00:00" -> "IT1823A"
-    """
-    if pd.isna(sp_id):
-        return sp_id
-    
-    sp_id = str(sp_id)
-    
-    # Pattern for IT/SPO.IT1823A_5_BETA_2016-10-13_00:00:00
-    match = re.search(r'[A-Z]{2}/SPO\.([A-Z]{2}\d+[A-Z]?)_', sp_id)
-    if match:
-        return match.group(1)
-    
-    # Fallback pattern for other countries
-    match = re.search(r'([A-Z]{2}\d+[A-Z]?)_', sp_id)
-    if match:
-        return match.group(1)
-    
-    # Ultimate fallback: try to extract country code + station number
-    match = re.search(r'([A-Z]{2}\d+[A-Z]?)', sp_id)
-    if match:
-        return match.group(1)
-    
-    return sp_id
+ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT / "src"
+if SRC_DIR.exists() and str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from eea_vocabularies import clean_samplingpoint_id
+
 
 def load_metadata(path, verbose=False):
     """Load and validate station metadata."""
@@ -61,7 +41,7 @@ def load_metadata(path, verbose=False):
         raise ValueError(f"Metadata file missing required columns: {missing_cols}")
     
     # Create cleaned station IDs from Sampling Point Id
-    df['Station_clean'] = df['Sampling Point Id'].apply(extract_station_id)
+    df['Station_clean'] = df['Sampling Point Id'].apply(clean_samplingpoint_id)
     
     if verbose:
         print(f"Loaded {len(df)} stations from metadata")
@@ -149,7 +129,7 @@ def process_parquet_file(path, station_ids, pollutants=None, start=None, end=Non
         return pd.DataFrame()
     
     # Extract station IDs from Samplingpoint
-    df_parquet['Station_clean'] = df_parquet['Samplingpoint'].apply(extract_station_id)
+    df_parquet['Station_clean'] = df_parquet['Samplingpoint'].apply(clean_samplingpoint_id)
 
     if verbose:
         print(f"  {len(df_parquet)} records in {path.name}")
@@ -213,7 +193,9 @@ def debug_id_matching(metadata_df, parquet_dirs, bbox, pollutants=None, verbose=
             try:
                 df_parquet = pq.read_table(pq_file).to_pandas()
                 if 'Samplingpoint' in df_parquet.columns:
-                    parquet_station_ids = set(df_parquet['Samplingpoint'].apply(extract_station_id).tolist())
+                    parquet_station_ids = set(
+                        df_parquet['Samplingpoint'].apply(clean_samplingpoint_id).tolist()
+                    )
                     all_parquet_station_ids.update(parquet_station_ids)
                     parquet_files_by_dir[parquet_dir].append((pq_file.name, parquet_station_ids))
                     
