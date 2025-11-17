@@ -3,8 +3,9 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORK_DIR=${WORK_DIR:-"$REPO_ROOT/work"}
 
-OUTPUT_DIR=${OUTPUT_DIR:-"$REPO_ROOT/metadata"}
+OUTPUT_DIR=${OUTPUT_DIR:-"$WORK_DIR/metadata"}
 OUTPUT_FILE=${OUTPUT_FILE:-"stations_metadata.csv"}
 DOWNLOAD_URL=${DOWNLOAD_URL:-"https://discomap.eea.europa.eu/App/AQViewer/download?fqn=Airquality_Dissem.b2g.measurements&f=csv"}
 FORCE_FLAG=${FORCE_FLAG:-""}
