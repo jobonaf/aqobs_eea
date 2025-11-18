@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 download_eea_e1a_e2a.py
-Description: Downloads EEA hourly or daily air quality data (E1a/E2a datasets)
+Description: Downloads EEA air quality data (E1a/E2a datasets)
 Author: Giovanni Bonafè | ARPA FVG
 Created: 2025-11-04
-Last update: 2025-11-13
-Version: 1.2
+Last update: 2025-11-17
+Version: 1.3
 """
 
 import os
@@ -53,15 +53,13 @@ def download_file(url, file_path, chunk_size=8192):
     try:
         response = requests.get(url, stream=True, timeout=60)
         response.raise_for_status()
-        total_size = int(response.headers.get("content-length", 0))
-        downloaded_size = 0
         with open(file_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 if chunk:
                     f.write(chunk)
-                    downloaded_size += len(chunk)
         if file_path.exists() and file_path.stat().st_size > 0:
-            logger.info(f"✓ Downloaded: {file_path.name}")
+            file_size_mb = file_path.stat().st_size / 1024 / 1024
+            logger.info(f"✓ Downloaded: {file_path.name} ({file_size_mb:.1f} MB)")
             return True
         else:
             file_path.unlink(missing_ok=True)
@@ -73,11 +71,10 @@ def download_file(url, file_path, chunk_size=8192):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Download EEA hourly or daily air quality data (E1a/E2a)",
+        description="Download EEA air quality data (E1a/E2a datasets)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Valid datasets: E1a (1), E2a (2)
-Aggregation types: hour, day, all
+Valid datasets: E1a (2), E2a (1)
 """
     )
 
@@ -87,8 +84,6 @@ Aggregation types: hour, day, all
     parser.add_argument("--dataset", choices=["E1a", "E2a"], default="E2a")
     parser.add_argument("--cities", nargs="+", default=[])
     parser.add_argument("--download-dir", type=str, default=DEFAULT_DOWNLOAD_DIR)
-    parser.add_argument("--aggregation", choices=["hour", "day", "all"], default="hour",
-                        help="Aggregation type: hour, day, or all (default: hour)")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--force", action="store_true")
@@ -98,9 +93,11 @@ Aggregation types: hour, day, all
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    dataset_codes = {"E1a": 2, "E2a": 1} 
+    # CORRETTO: E1a=2, E2a=1
+    dataset_codes = {"E1a": 2, "E2a": 1}
     download_dir = setup_download_dir(args.download_dir)
-    request_body_base = {
+    
+    request_body = {
         "countries": args.countries,
         "cities": args.cities,
         "pollutants": args.pollutants,
@@ -109,34 +106,26 @@ Aggregation types: hour, day, all
     }
 
     logger.info("="*60)
-    logger.info(f"Dataset: {args.dataset}, Countries: {args.countries}, Pollutants: {args.pollutants}")
+    logger.info(f"Dataset: {args.dataset} (code: {dataset_codes[args.dataset]})")
+    logger.info(f"Countries: {args.countries}")
+    logger.info(f"Pollutants: {args.pollutants}")
     logger.info(f"Download directory: {download_dir}")
-    logger.info(f"Aggregation type: {args.aggregation}")
     logger.info("="*60)
 
     total_files = downloaded_files = skipped_files = failed_files = 0
-    aggregations = ["hour", "day"] if args.aggregation == "all" else [args.aggregation]
 
-    seen_files = set()  # per evitare duplicati
-
-    for agg in aggregations:
-        request_body = request_body_base.copy()
-        request_body["aggregationType"] = agg
-        logger.info(f"Fetching list of files for aggregation: {agg}")
-        try:
-            response = make_api_request(API_URL, ENDPOINT, request_body)
-            urls = [u.strip() for u in response.text.split("\n")[1:] if u.strip()]
-            logger.info(f"Found {len(urls)} files for aggregation {agg}")
-        except Exception as e:
-            logger.error(f"Failed to fetch files for {agg}: {e}")
-            continue
-
+    logger.info("Requesting file list...")
+    try:
+        response = make_api_request(API_URL, ENDPOINT, request_body)
+        urls = [u.strip() for u in response.text.split("\n")[1:] if u.strip()]
+        logger.info(f"Found {len(urls)} files")
+        
+        if not urls:
+            logger.warning("No files found with current filters")
+            
         for url in urls:
-            filename = url.split("/")[-1]
-            if filename in seen_files:
-                continue
-            seen_files.add(filename)
             total_files += 1
+            filename = url.split("/")[-1]
             file_path = download_dir / filename
 
             if file_path.exists() and not args.force:
@@ -152,6 +141,9 @@ Aggregation types: hour, day, all
                 else:
                     failed_files += 1
 
+    except Exception as e:
+        logger.error(f"Failed to fetch file list: {e}")
+
     logger.info("="*60)
     logger.info("DOWNLOAD SUMMARY")
     logger.info(f"Total files available: {total_files}")
@@ -159,6 +151,7 @@ Aggregation types: hour, day, all
     logger.info(f"Files skipped (already exist): {skipped_files}")
     logger.info(f"Files failed: {failed_files}")
     logger.info(f"Final directory: {download_dir.absolute()}")
+    
     if args.dry_run:
         logger.info("DRY RUN COMPLETED - No files were downloaded")
 
